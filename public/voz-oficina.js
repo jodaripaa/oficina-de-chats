@@ -535,7 +535,7 @@
   function pintarVoz() {
     const v = V();
     const sin = !v?.puedeHablar;
-    btnVoz.textContent = sin || v.silenciado ? '🔇' : '🔊';
+    btnVoz.textContent = sin || v.silenciado ? '🤐' : '🗣️'; // distinto del 🔊 de la campanita
     btnVoz.title = sin ? 'Este navegador no tiene voces: verás solo los globos' : v.silenciado ? 'Voces en silencio: clic para prenderlas' : 'Voces prendidas: clic para silenciarlas';
     btnVoz.setAttribute('aria-label', btnVoz.title);
     btnVoz.setAttribute('aria-pressed', String(!!(sin || v.silenciado)));
@@ -546,7 +546,7 @@
     if (!v?.puedeHablar) { toast('Este navegador no sabe hablar: los trabajadores te muestran sus globos igual. En Microsoft Edge tienen voz.', 'info', 5000); return; }
     const callado = v.silenciar(!v.silenciado);
     pintarVoz();
-    toast(callado ? '🔇 Voces en silencio. Los globos siguen mostrando lo que dicen.' : '🔊 ¡Voces prendidas!', 'ok', 2600);
+    toast(callado ? '🤐 Voces en silencio. Los globos siguen mostrando lo que dicen.' : '🗣️ ¡Voces prendidas!', 'ok', 2600);
     if (!callado && !sesion) v.hablar('¡Listo, ya tengo voz!', { id: 'recepcion' });
   });
   addEventListener('voz:silencio', pintarVoz);

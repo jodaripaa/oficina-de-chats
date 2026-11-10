@@ -61,6 +61,15 @@ Necesitas Windows, [Node.js](https://nodejs.org) y Claude Code (la app de escrit
 - Cuando un hilo **pasa a esperarte**, **completa su lista** o **termina un turno**: suena una campanita, su trabajador salta con la mano arriba, sale un aviso (púlsalo para ir) y el título de la ventana muestra cuántos te esperan, por ejemplo «(3) Oficina de chats». Al abrir la oficina no avisa de lo que ya estaba.
 - 🔊 / 🔇 arriba silencia la campanita y las notificaciones (se recuerda). En el pie de la recepción puedes activar las **notificaciones de Windows** (salen cuando la oficina no está al frente) y probar el sonido.
 
+## Voz: te hablan y les hablas 🗣️
+
+Usa las voces y el dictado gratuitos del navegador (mejor en Edge, que tiene voces naturales en español).
+
+- **🔊 Escuchar reporte** en la ficha de cada escritorio: el trabajador te cuenta en un globo y en voz cuántos pasos lleva, qué hizo y qué te pregunta. Cada uno tiene su propia voz.
+- **☕ Reunión de la mañana** en la recepción: la cámara pasa escritorio por escritorio y cada hilo activo da su reporte. Puedes pausar, saltar o terminar.
+- **🎙️** junto a la caja de instrucciones y en el buzón: dictas y el texto aparece en vivo. Nunca se envía solo: lo revisas y pulsas Enviar.
+- **🗣️ / 🤐** arriba silencia las voces (los globos siguen apareciendo).
+
 ## Tema navideño 🎄
 
 Por ahora la oficina viene vestida de Navidad: eres Santa, cae nieve y hay árbol, guirnaldas, coronas y regalos en los hilos que terminaron su lista. El botón 🏢 de arriba la devuelve a la oficina normal (y 🎄 la vuelve a poner navideña).

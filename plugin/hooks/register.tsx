@@ -710,10 +710,19 @@ export const register: Register = on => {
 
     const started = await next(e)
     if (hasGame) {
-      // El servidor del juego vive mientras viva este panel (si ya hay uno abierto, el nuevo se cierra solo).
+      // El servidor del juego vive mientras viva este panel. Si se cae, o si otro ocupaba el puerto y
+      // después se cerró, lo vuelve a levantar solo (espera más entre intentos si sale enseguida).
       void (async () => {
-        const srv = $.process.spawn({ argv: ['node', 'server.js'], cwd: gameDir })
-        for await (const piece of srv) { void piece }
+        let wait = 5000
+        for (;;) {
+          const began = Date.now()
+          try {
+            const srv = $.process.spawn({ argv: ['node', 'server.js'], cwd: gameDir })
+            for await (const piece of srv) { void piece }
+          } catch { /* no arrancó: se reintenta */ }
+          wait = Date.now() - began > 60000 ? 5000 : Math.min(wait * 2, 120000)
+          await new Promise<void>(resolve => { $.clock.after(wait, resolve) })
+        }
       })()
     }
     return started

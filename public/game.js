@@ -1241,7 +1241,7 @@ function openHelp() {
       <p>⚡ Los que teclean están <b>trabajando</b>. 🔔 Los del globo naranja <b>te están esperando</b>. 💤 Los dormidos no tienen actividad hace más de una semana (están en el archivador).</p>
       <p>📋 La <b>pizarra</b> resume el avance de la oficina · ➕ el <b>buzón</b> crea un hilo nuevo · 📣 el <b>megáfono</b> pide avance a todos · 🗄️ el <b>archivador</b> guarda los dormidos.</p>
       <p>🛎️ En el vestíbulo, la <b>recepción</b> te dice quién te espera. Pulsa <kbd>M</kbd> para ir a cualquier oficina.</p>
-      <p>🔊 En cada escritorio, <b>Escuchar reporte</b> hace que el trabajador te cuente cómo va; en recepción está la <b>☕ reunión de la mañana</b>. Con 🎙️ le dictas instrucciones (nunca se envían solas) y el botón 🔊 de arriba silencia las voces.</p>
+      <p>🔊 En cada escritorio, <b>Escuchar reporte</b> hace que el trabajador te cuente cómo va; en recepción está la <b>☕ reunión de la mañana</b>. Con 🎙️ le dictas instrucciones (nunca se envían solas) y el botón 🗣️ de arriba silencia las voces (el 🔊 es la campanita de avisos).</p>
       <div class="premium-slot">${premiumHelpBox()}</div>
     </div>
     <footer class="modal-foot"><div class="foot-row"><button class="pixel-btn primary" data-close>${XMAS ? '🎁 ¡A REPARTIR!' : '¡A TRABAJAR!'}</button></div></footer>`, bindPremiumHelp);
