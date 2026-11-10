@@ -318,18 +318,25 @@ function drawDesk(o, time) {
   px(ctx, '#2d2a3e', bx + 2, by + 3, 12, 13); px(ctx, '#3f3a57', bx + 3, by + 4, 10, 5);
   const present = t.status === 'trabajando' || t.status === 'espera' || t.status === 'hoy';
   if (present) {
-    const bob = t.status === 'trabajando' ? frame : t.status === 'espera' ? Math.round(Math.sin(time / 300)) : 0;
-    px(ctx, shirt, bx + 3, by + 9, 10, 8);
-    px(ctx, skin, bx + 4, by + 1 + bob, 8, 7);
-    px(ctx, hair, bx + 4, by + bob, 8, 3); px(ctx, hair, bx + 3, by + 1 + bob, 1, 4); px(ctx, hair, bx + 12, by + 1 + bob, 1, 3);
-    px(ctx, '#1f2937', bx + 6, by + 5 + bob, 1, 1); px(ctx, '#1f2937', bx + 9, by + 5 + bob, 1, 1);
-    px(ctx, '#f4a3a3', bx + 5, by + 6 + bob, 1, 1); px(ctx, '#f4a3a3', bx + 10, by + 6 + bob, 1, 1); // mejillas
-    if (t.status === 'trabajando') {
+    // Aviso reciente (avisos.js): salta y levanta la mano unos segundos
+    const fx = typeof avisoFx === 'function' ? avisoFx(t.id, time) : null;
+    const wy = by - (fx ? fx.hop : 0);
+    const bob = fx ? 0 : t.status === 'trabajando' ? frame : t.status === 'espera' ? Math.round(Math.sin(time / 300)) : 0;
+    px(ctx, shirt, bx + 3, wy + 9, 10, 8);
+    px(ctx, skin, bx + 4, wy + 1 + bob, 8, 7);
+    px(ctx, hair, bx + 4, wy + bob, 8, 3); px(ctx, hair, bx + 3, wy + 1 + bob, 1, 4); px(ctx, hair, bx + 12, wy + 1 + bob, 1, 3);
+    px(ctx, '#1f2937', bx + 6, wy + 5 + bob, 1, 1); px(ctx, '#1f2937', bx + 9, wy + 5 + bob, 1, 1);
+    px(ctx, '#f4a3a3', bx + 5, wy + 6 + bob, 1, 1); px(ctx, '#f4a3a3', bx + 10, wy + 6 + bob, 1, 1); // mejillas
+    if (fx) {
+      px(ctx, shirt, bx + 13, wy + 4, 2, 6); px(ctx, skin, bx + 13, wy + 1, 3, 3); // mano arriba
+      if (fx.both) { px(ctx, shirt, bx + 1, wy + 4, 2, 6); px(ctx, skin, bx, wy + 1, 3, 3); }
+      else px(ctx, skin, bx + 2, wy + 13, 3, 3);
+    } else if (t.status === 'trabajando') {
       px(ctx, skin, bx + 2, by + 13 + frame, 3, 3); px(ctx, skin, bx + 11, by + 14 - frame, 3, 3);
     } else {
       px(ctx, skin, bx + 2, by + 13, 3, 3); px(ctx, skin, bx + 11, by + 13, 3, 3);
     }
-    if (XMAS) holidayHat(bx, by + bob, seed % 3 === 0);
+    if (XMAS) holidayHat(bx, wy + bob, seed % 3 === 0);
   } else if (t.status === 'dormido') {
     px(ctx, shirt, bx + 3, by + 11, 10, 6);
     px(ctx, hair, bx + 4, by + 9, 8, 6); px(ctx, skin, bx + 5, by + 13, 6, 3);
@@ -900,7 +907,7 @@ async function openDesk(id) {
     box.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
     if (tab === 'resumen') {
       body.innerHTML = `
-        ${t.ask ? `<div class="box warnbox"><h3>🔔 TE PREGUNTA</h3>${rich(t.ask)}</div>` : ''}
+        ${t.ask ? `<div class="box warnbox"><h3>🔔 TE PREGUNTA</h3>${rich(t.ask)}${t.delicate ? delicateNote() : ''}</div>` : ''}
         <div class="box"><h3>AVANCE</h3>${bar(t.done, t.total)}${t.current ? `<p style="margin:10px 0 0">▶ <b>Ahora:</b> ${rich(t.current)}</p>` : ''}</div>
         ${t.recap ? `<div class="box"><h3>📝 ÚLTIMO RESUMEN</h3>${rich(t.recap)}</div>` : ''}
         <div class="stats">
@@ -944,11 +951,13 @@ async function openDesk(id) {
         : '<p class="empty">Este hilo no ha editado archivos.</p>';
     }
   };
-  const quick = [
-    ['▶ Continúa', 'Continúa con el siguiente paso de tu lista.'],
-    ['✅ Sí, hazlo', 'Sí, hazlo.'],
-    ['📋 ¿Cómo vas?', 'Dame un resumen corto de cómo vas: qué está hecho, qué falta y si algo te bloquea.'],
-  ];
+  // Con una pregunta pendiente, los botones rápidos le responden a esa pregunta. Todo pasa por confirmSend (recepcion.js),
+  // que muestra el texto exacto con su contexto «[Oficina] …» antes de enviarlo.
+  const quick = t.ask
+    ? (t.replies || []).map(r => [`💬 ${r.label}`, r.answer, 'reply'])
+    : [['▶ Continúa', 'Continúa con el siguiente paso de tu lista.', 'instruction']];
+  quick.push(['📋 ¿Cómo vas?', 'Dame un resumen corto de cómo vas: qué está hecho, qué falta y si algo te bloquea.', 'instruction']);
+  const what = `Mensaje a «${cut(t.title, 30)}»`;
   openModal(`
     <header class="modal-head">
       <span class="avatar-slot"></span>
@@ -965,9 +974,9 @@ async function openDesk(id) {
     <footer class="modal-foot">
       ${t.canMessage ? `
         <div class="quick">${quick.map(([l, m], i) => `<button class="pixel-btn" data-quick="${i}">${l}</button>`).join('')}</div>
-        <textarea class="say" placeholder="Escribe una instrucción para este hilo…" aria-label="Instrucción para el hilo"></textarea>
+        <textarea class="say" placeholder="${t.ask ? 'Escribe tu respuesta a su pregunta…' : 'Escribe una instrucción para este hilo…'}" aria-label="Mensaje para el hilo"></textarea>
         <div class="foot-row">
-          <button class="pixel-btn primary" data-send>💬 ENVIAR</button>
+          <button class="pixel-btn primary" data-send>💬 ${t.ask ? 'RESPONDER' : 'ENVIAR'}</button>
           <span class="grow"></span>
           ${t.canOpen ? '<button class="pixel-btn" data-open>↗ ABRIR HILO</button>' : ''}
           <button class="pixel-btn ghost" data-archive>🗄 ARCHIVAR</button>
@@ -979,12 +988,14 @@ async function openDesk(id) {
     fetch(`/api/thread?id=${encodeURIComponent(id)}`).then(r => r.json()).then(h => { history = h; if (modalOpen) render(box); })
       .catch(() => { history = { error: 'No pude leer la bitácora.' }; if (modalOpen) render(box); });
     const say = box.querySelector('.say');
-    box.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => sendAction({ type: 'send', threadId: id, message: quick[Number(b.dataset.quick)][1] }, `Instrucción a «${cut(t.title, 30)}»`)));
-    box.querySelector('[data-send]')?.addEventListener('click', () => {
+    box.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => {
+      const [, message, kind] = quick[Number(b.dataset.quick)];
+      confirmSend({ threadId: id, kind, ask: kind === 'reply' ? t.ask : null, message }, what);
+    }));
+    box.querySelector('[data-send]')?.addEventListener('click', async () => {
       const m = say.value.trim();
       if (!m) { say.focus(); return; }
-      sendAction({ type: 'send', threadId: id, message: m }, `Instrucción a «${cut(t.title, 30)}»`);
-      say.value = '';
+      if (await confirmSend({ threadId: id, kind: t.ask ? 'reply' : 'instruction', ask: t.ask, message: m }, what)) say.value = '';
     });
     say?.addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) box.querySelector('[data-send]').click(); });
     box.querySelector('[data-open]')?.addEventListener('click', () => sendAction({ type: 'open', threadId: id }, 'Abrir el hilo'));
@@ -1093,25 +1104,7 @@ function openBroadcast(key) {
   });
 }
 
-/* ---- Recepción ---- */
-function openReception() {
-  const all = allThreads();
-  const waiting = all.filter(t => t.status === 'espera');
-  const working = all.filter(t => t.status === 'trabajando');
-  openModal(`
-    <header class="modal-head"><div><h2>🛎️ RECEPCIÓN</h2><div class="sub">¡Hola! Esto es lo que pasa en la oficina</div></div>
-      <button class="pixel-btn close" data-close aria-label="Cerrar">✕</button></header>
-    <div class="modal-body">
-      <div class="stats">
-        <div class="stat"><b style="color:var(--green)">${working.length}</b><span>trabajando</span></div>
-        <div class="stat"><b style="color:var(--orange)">${waiting.length}</b><span>te esperan</span></div>
-        <div class="stat"><b>${world.projects.length}</b><span>oficinas</span></div>
-        <div class="stat"><b>${all.length}</b><span>hilos</span></div>
-      </div>
-      <div class="box ${waiting.length ? 'warnbox' : ''}"><h3>🔔 TE ESPERAN</h3>${waiting.length ? `<div class="rows">${waiting.map(t => threadRow(t)).join('')}</div>` : '<p class="empty">Nadie te está esperando. ¡Todo al día!</p>'}</div>
-      <div class="box"><h3>⚡ TRABAJANDO AHORA</h3>${working.length ? `<div class="rows">${working.map(t => threadRow(t)).join('')}</div>` : '<p class="empty">Ningún hilo está trabajando en este momento.</p>'}</div>
-    </div>`, bindRows);
-}
+/* ---- Recepción: está en recepcion.js (tarjetas para responder sin caminar) ---- */
 
 /* ---- Directorio / ir a ---- */
 function openGoto() {
@@ -1170,7 +1163,7 @@ async function sendAction(payload, what) {
   try {
     const r = await fetch('/api/action', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Oficina-Token': TOKEN }, body: JSON.stringify(payload) });
     const j = await r.json();
-    if (!r.ok) { toast(`${what}: ${j.error || 'no se pudo'}`, 'error'); return; }
+    if (!r.ok) { toast(`${what}: ${j.error || 'no se pudo'}`, 'error'); return null; }
     toast(`${what}: enviando…`, 'info', 2000);
     const started = Date.now();
     let warned = false;
@@ -1185,8 +1178,10 @@ async function sendAction(payload, what) {
       if (Date.now() - started < 300000) setTimeout(poll, 1200);
     };
     setTimeout(poll, 800);
+    return j.id;
   } catch {
     toast(`${what}: no pude hablar con el servidor.`, 'error');
+    return null;
   }
 }
 
@@ -1226,6 +1221,7 @@ async function refresh() {
     }
     $('#loading').hidden = true;
     renderHud();
+    dispatchEvent(new CustomEvent('oficina:mundo', { detail: data })); // avisos.js compara con el refresco anterior
   } catch {
     $('#place').textContent = '⚠️ Sin conexión con el servidor';
   }
@@ -1265,7 +1261,7 @@ function toggleTheme() {
 }
 applyThemeChrome();
 $('#btn-theme').addEventListener('click', toggleTheme);
-$('#btn-waiting').addEventListener('click', openReception);
+$('#btn-waiting').addEventListener('click', () => openReception());
 $('#btn-goto').addEventListener('click', openGoto);
 $('#btn-help').addEventListener('click', openHelp);
 

@@ -51,7 +51,15 @@ Necesitas Windows, [Node.js](https://nodejs.org) y Claude Code (la app de escrit
   - ➕ el **buzón** crea un hilo nuevo en la carpeta del proyecto.
   - 📣 el **megáfono** pide un resumen de avance a todos los hilos que no están trabajando.
   - 🗄️ el **archivador** guarda los hilos dormidos.
-- En el vestíbulo, la **recepción** te muestra quién te espera y quién está trabajando.
+- En el vestíbulo, la **recepción** (o el botón 🔔 de arriba) te muestra quién te espera y quién está trabajando.
+
+## Responder sin caminar y avisos 🔔
+
+- En la **recepción**, cada hilo que te espera tiene su tarjeta: la pregunta, su último resumen y botones de respuesta (los que propuso el hilo, las opciones de la pregunta o **Sí / No**), además de **✍️ Escribir respuesta** e **Ir a su escritorio**.
+- Antes de enviar ves **el texto exacto** y a qué hilo va. Todo mensaje sale con su contexto, por ejemplo `[Oficina] Respuesta a tu pregunta «¿Sigo con el bloque B?»: Sí.`, para que el hilo sepa de dónde viene y a qué responde.
+- Si la pregunta habla de **subir, hacer push, publicar, desplegar, borrar o pagar**, la oficina te avisa: el hilo te pedirá confirmarlo directamente en su chat, porque la oficina no sirve para aprobar eso.
+- Cuando un hilo **pasa a esperarte**, **completa su lista** o **termina un turno**: suena una campanita, su trabajador salta con la mano arriba, sale un aviso (púlsalo para ir) y el título de la ventana muestra cuántos te esperan, por ejemplo «(3) Oficina de chats». Al abrir la oficina no avisa de lo que ya estaba.
+- 🔊 / 🔇 arriba silencia la campanita y las notificaciones (se recuerda). En el pie de la recepción puedes activar las **notificaciones de Windows** (salen cuando la oficina no está al frente) y probar el sonido.
 
 ## Tema navideño 🎄
 
