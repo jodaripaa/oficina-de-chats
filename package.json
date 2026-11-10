@@ -1,0 +1,9 @@
+{
+  "name": "oficina-de-chats",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Oficina virtual: cada proyecto es una oficina y cada hilo de Claude Code un escritorio con su avance.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

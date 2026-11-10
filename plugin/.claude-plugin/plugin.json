@@ -1,0 +1,6 @@
+{
+  "name": "oficina",
+  "version": "0.1.0",
+  "description": "Oficina virtual: cada proyecto es una oficina y cada hilo de Claude un escritorio con su avance; envía instrucciones a los hilos desde el panel.",
+  "types": "./types/index.d.ts"
+}

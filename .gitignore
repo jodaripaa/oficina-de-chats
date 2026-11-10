@@ -1,0 +1,11 @@
+# Datos privados de cada computador: token, estado en vivo de los hilos y órdenes enviadas
+data/
+
+# Generado por Claude Code al cargar el panel
+.claude-plugin/types/
+plugin/.claude-plugin/types/
+.mcpb-cache/
+
+node_modules/
+*.log
+.DS_Store

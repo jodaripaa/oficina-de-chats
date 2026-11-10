@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="oficina-token" content="__OFICINA_TOKEN__">
+  <title>Oficina de chats</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game" aria-label="Oficina virtual: camina por el edificio y visita cada proyecto"></canvas>
+
+  <header class="hud">
+    <div class="hud-title"><span class="logo">🏢</span><span class="word">OFICINA</span></div>
+    <div class="hud-place" id="place">Vestíbulo</div>
+    <div class="hud-chips" id="chips"></div>
+    <div class="hud-actions">
+      <button class="pixel-btn warn" id="btn-waiting" title="Hilos que esperan tu respuesta">🔔 <span id="waiting-count">0</span></button>
+      <button class="pixel-btn" id="btn-goto" title="Ir a una oficina (M)">🗺️ Ir a…</button>
+      <button class="pixel-btn" id="btn-theme" title="Cambiar el tema de la oficina">🎄</button>
+      <button class="pixel-btn" id="btn-help" title="Cómo se juega">?</button>
+    </div>
+  </header>
+
+  <div class="hint" id="hint">Flechas o WASD para caminar · clic para ir · <b>E</b> para interactuar · <b>M</b> mapa</div>
+  <div class="loading" id="loading">Abriendo la oficina…</div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <div class="modal-back" id="modal-back" hidden>
+    <section class="modal" id="modal" role="dialog" aria-modal="true"></section>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
