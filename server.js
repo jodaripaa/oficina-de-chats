@@ -7,6 +7,7 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const crypto = require('crypto');
+const mensajes = require('./mensajes'); // contexto «[Oficina] …», respuestas sugeridas y acciones delicadas
 
 const PORT = Number(process.env.PORT) || 4317;
 const CLAUDE_DIR = process.env.CLAUDE_PROJECTS_DIR || path.join(os.homedir(), '.claude', 'projects');
@@ -64,7 +65,7 @@ function applyDelta(plan, inp) {
 /** Recorre un hilo completo. Con `history` arma además la bitácora por turnos. */
 async function walk(file, history) {
   const d = { id: path.basename(file, '.jsonl'), title: null, first: null, last: null, cwd: null, branch: null,
-    created: null, updated: null, msgs: 0, plan: null, recap: null, ask: null, closed: false, tools: 0, files: 0 };
+    created: null, updated: null, msgs: 0, plan: null, recap: null, ask: null, askReplies: [], closed: false, tools: 0, files: 0 };
   const turns = [];
   const files = new Map();
   let turn = null;
@@ -113,6 +114,8 @@ async function walk(file, history) {
         } else if (c.name === 'mcp__ccd_turn__wrap_up') {
           if (inp.recap) d.recap = inp.recap;
           d.ask = inp.ask || null;
+          // Botones de respuesta que el hilo propuso (los de app, como «commit», no se pueden pulsar desde aquí)
+          d.askReplies = Array.isArray(inp.actions) ? inp.actions.filter(a => a && !a.action && a.label).map(a => String(a.label)) : [];
           d.closed = true;
           if (d.plan) d.plan.forEach(p => { p.status = 'completed'; });
           if (turn) { turn.recap = inp.recap || null; turn.ask = inp.ask || null; if (turn.plan) turn.plan.forEach(p => { p.status = 'completed'; }); }
@@ -208,6 +211,8 @@ async function buildWorld() {
         plan: d.plan, done, total: d.plan ? d.plan.length : 0,
         current: d.plan ? (d.plan.find(x => x.status === 'in_progress') || {}).content || null : null,
         recap: d.recap, ask: d.closed ? d.ask : null, last: d.last,
+        replies: d.closed && d.ask ? mensajes.suggestReplies(d.ask, d.askReplies) : null,
+        delicate: Boolean(d.closed && d.ask && mensajes.isDelicate(d.ask)),
         canMessage: Boolean(s), canOpen: Boolean(s && s.link),
         sessionId: s?.sessionId || null, link: s?.link || null,
       });
@@ -253,7 +258,10 @@ function makeAction(body) {
     const hit = findThread(String(body.threadId || ''));
     if (!hit?.t.sessionId) throw new Error('Ese hilo no está abierto en la app.');
     if (!message) throw new Error('Escribe la instrucción.');
-    return { type, title: hit.t.title, sessionId: hit.t.sessionId, message };
+    // Todo mensaje sale con su contexto. Sin «kind», si el hilo tiene una pregunta pendiente se toma como respuesta.
+    const kind = ['reply', 'instruction'].includes(body.kind) ? body.kind : (hit.t.ask ? 'reply' : 'instruction');
+    const ask = typeof body.ask === 'string' && body.ask.trim() ? body.ask : hit.t.ask;
+    return { type, title: hit.t.title, sessionId: hit.t.sessionId, message: mensajes.composeMessage({ kind, message, ask }) };
   }
   if (type === 'open' || type === 'archive') {
     const hit = findThread(String(body.threadId || ''));
@@ -266,7 +274,7 @@ function makeAction(body) {
     const targets = p.threads.filter(t => t.sessionId && ['hoy', 'semana', 'espera'].includes(t.status))
       .map(t => ({ sessionId: t.sessionId, title: t.title }));
     if (!targets.length) throw new Error('No hay hilos disponibles para preguntarles.');
-    return { type, project: p.name, targets, message: message || 'Dame un resumen corto de cómo vas: qué está hecho, qué falta y si algo te bloquea.' };
+    return { type, project: p.name, targets, message: mensajes.composeMessage({ kind: 'broadcast', message: message || 'Dame un resumen corto de cómo vas: qué está hecho, qué falta y si algo te bloquea.' }) };
   }
   if (type === 'create') {
     const p = (lastWorld?.projects || []).find(x => x.key === body.projectKey);
@@ -313,8 +321,10 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       for await (const chunk of req) { body += chunk; if (body.length > 20000) return json(res, 413, { error: 'Muy largo' }); }
       if (!lastWorld) await buildWorld();
-      let action;
-      try { action = makeAction(JSON.parse(body)); } catch (e) { return json(res, 400, { error: e.message }); }
+      let action, input;
+      try { input = JSON.parse(body); action = makeAction(input); } catch (e) { return json(res, 400, { error: e.message }); }
+      // Vista previa: el texto exacto que se enviaría, sin dejar nada en la cola (para confirmar antes de enviar).
+      if (input.preview) return json(res, 200, { preview: true, title: action.title, message: action.message, delicate: String(action.message || '').includes(mensajes.DELICATE_NOTE) });
       const id = `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
       fs.writeFileSync(path.join(QUEUE_DIR, `${id}.json`), JSON.stringify({ id, created: new Date().toISOString(), ...action }));
       cleanupDone();
