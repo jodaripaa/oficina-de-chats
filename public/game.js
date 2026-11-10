@@ -847,6 +847,8 @@ function closeModal() {
   $('#modal').innerHTML = '';
   modalOpen = false;
 }
+/** Avisa a los módulos (p. ej. voz-oficina.js) que se abrió una ventana, para que le agreguen sus botones. */
+function avisarVentana(tipo, box, datos = {}) { document.dispatchEvent(new CustomEvent('oficina:ventana', { detail: { tipo, box, ...datos } })); }
 $('#modal-back').addEventListener('mousedown', ev => { if (ev.target === ev.currentTarget) closeModal(); });
 
 function allThreads() { return world ? world.projects.flatMap(p => p.threads.map(t => ({ ...t, project: p }))) : []; }
@@ -993,6 +995,7 @@ async function openDesk(id) {
       if (arch.dataset.sure) { sendAction({ type: 'archive', threadId: id }, `Archivar «${cut(t.title, 30)}»`); closeModal(); return; }
       arch.dataset.sure = '1'; arch.textContent = '¿SEGURO? CLIC OTRA VEZ'; arch.classList.add('warn');
     });
+    avisarVentana('escritorio', box, { hilo: t, proyecto: p });
   });
 }
 
@@ -1070,6 +1073,7 @@ function openNewThread(key) {
     };
     box.querySelector('[data-go]').addEventListener('click', go);
     say.addEventListener('keydown', ev => { if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) go(); });
+    avisarVentana('buzon', box, { proyecto: p });
   });
 }
 
@@ -1110,7 +1114,7 @@ function openReception() {
       </div>
       <div class="box ${waiting.length ? 'warnbox' : ''}"><h3>🔔 TE ESPERAN</h3>${waiting.length ? `<div class="rows">${waiting.map(t => threadRow(t)).join('')}</div>` : '<p class="empty">Nadie te está esperando. ¡Todo al día!</p>'}</div>
       <div class="box"><h3>⚡ TRABAJANDO AHORA</h3>${working.length ? `<div class="rows">${working.map(t => threadRow(t)).join('')}</div>` : '<p class="empty">Ningún hilo está trabajando en este momento.</p>'}</div>
-    </div>`, bindRows);
+    </div>`, box => { bindRows(box); avisarVentana('recepcion', box); });
 }
 
 /* ---- Directorio / ir a ---- */
@@ -1158,6 +1162,7 @@ function openHelp() {
       <p>⚡ Los que teclean están <b>trabajando</b>. 🔔 Los del globo naranja <b>te están esperando</b>. 💤 Los dormidos no tienen actividad hace más de una semana (están en el archivador).</p>
       <p>📋 La <b>pizarra</b> resume el avance de la oficina · ➕ el <b>buzón</b> crea un hilo nuevo · 📣 el <b>megáfono</b> pide avance a todos · 🗄️ el <b>archivador</b> guarda los dormidos.</p>
       <p>🛎️ En el vestíbulo, la <b>recepción</b> te dice quién te espera. Pulsa <kbd>M</kbd> para ir a cualquier oficina.</p>
+      <p>🔊 En cada escritorio, <b>Escuchar reporte</b> hace que el trabajador te cuente cómo va; en recepción está la <b>☕ reunión de la mañana</b>. Con 🎙️ le dictas instrucciones (nunca se envían solas) y el botón 🔊 de arriba silencia las voces.</p>
     </div>
     <footer class="modal-foot"><div class="foot-row"><button class="pixel-btn primary" data-close>${XMAS ? '🎁 ¡A REPARTIR!' : '¡A TRABAJAR!'}</button></div></footer>`);
 }
