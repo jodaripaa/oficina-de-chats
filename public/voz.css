@@ -1,0 +1,45 @@
+/* Voz de la oficina: globos, barra de reunión, micrófono y botones (ver voz-oficina.js) */
+
+/* Capa de globos encima del juego (no recibe clics) */
+#voz-capa { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 2; display: block; }
+
+/* Barra de control del reporte y la reunión */
+.voz-barra {
+  position: fixed; left: 0; right: 0; bottom: 12px; margin: 0 auto; z-index: 6;
+  display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap;
+  width: max-content; max-width: calc(100vw - 24px); padding: 8px 10px;
+  background: rgba(21, 18, 42, .94); border: 3px solid var(--line); border-radius: 4px; box-shadow: 0 4px 0 #0c0a18;
+  animation: pop .2s ease;
+}
+.voz-barra[hidden] { display: none; }
+.voz-barra .voz-que { font-family: var(--term); font-size: 21px; color: var(--ink); max-width: min(52ch, 80vw); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
+.voz-barra .voz-que b { color: var(--gold); font-weight: normal; }
+.voz-barra [hidden] { display: none; }
+body.voz-sesion .hint { visibility: hidden; }
+
+/* Botón «Escuchar reporte» en la cabecera de la ficha */
+.modal-head .voz-head { margin-left: auto; align-self: flex-start; display: flex; gap: 8px; flex: none; }
+.modal-head .voz-head + .close { margin-left: 0; }
+
+/* Micrófono dentro de la caja de instrucciones */
+.voz-say { position: relative; }
+.voz-say textarea.say { padding-right: 58px; display: block; }
+.voz-mic { position: absolute; right: 8px; bottom: 8px; padding: 6px 8px; font-size: 14px; line-height: 1; }
+.voz-mic.on { background: #b91c1c; border-color: #fca5a5; animation: voz-pulso 1s ease-in-out infinite; }
+.voz-mic.sin { opacity: .55; }
+@keyframes voz-pulso { 50% { box-shadow: 0 0 0 5px rgba(248, 113, 113, .45), 0 3px 0 #0c0a18; } }
+.voz-estado { font-family: var(--term); font-size: 19px; line-height: 1.15; color: var(--muted); margin-top: 6px; }
+.voz-estado:empty { display: none; }
+.voz-estado.on { color: #fca5a5; }
+.voz-estado.ok { color: var(--green); }
+.voz-estado.error { color: #fdba74; }
+
+/* Tema navideño */
+body.navidad .voz-barra { background: rgba(11, 35, 28, .95); border-color: #c9a227; box-shadow: 0 4px 0 #050d16, 0 0 18px rgba(255, 209, 102, .2); }
+body.navidad .voz-mic.on { background: #c1121f; border-color: #ffd166; }
+
+@media (max-width: 760px) {
+  .voz-head .voz-txt { display: none; }
+  .voz-barra .voz-que { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { .voz-mic.on, .voz-barra { animation: none; } }
