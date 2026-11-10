@@ -405,7 +405,7 @@ const SESSION_RE = /^local_[0-9a-f-]{36}$/i
 type QueueItem = {
   id: string
   created: string
-  type: 'send' | 'open' | 'archive' | 'broadcast' | 'create'
+  type: 'send' | 'open' | 'archive' | 'broadcast' | 'create' | 'speak' | 'transcribe'
   title?: string
   sessionId?: string
   link?: string
@@ -413,10 +413,64 @@ type QueueItem = {
   project?: string
   cwd?: string
   targets?: { sessionId: string; title: string }[]
+  /** speak: la frase (máximo 400 letras), la voz de ElevenLabs, el modelo y el nombre del mp3 (hash). */
+  text?: string
+  voiceId?: string
+  model?: string
+  audio?: string
+  /** transcribe: el archivo en data/uploads y su idioma. */
+  upload?: string
+  language?: string
 }
-type OrderResult = { status: 'sent' | 'relayed' | 'done' | 'error'; detail: string }
+/** `audio`: el hash del mp3 guardado en data/audio (speak); `text`: lo transcrito (transcribe). */
+type OrderResult = { status: 'sent' | 'relayed' | 'done' | 'error'; detail: string; audio?: string; text?: string }
 const ok = (detail: string): OrderResult => ({ status: 'done', detail })
 const fail = (detail: string): OrderResult => ({ status: 'error', detail: cut(detail, 240) })
+
+/* ---- Voces premium (ElevenLabs) ---- */
+const VOICE_RE = /^[A-Za-z0-9]{10,40}$/
+const AUDIO_RE = /^[a-f0-9]{32}$/
+const UPLOAD_RE = /^[a-z0-9-]{8,40}\.(webm|ogg|m4a|mp3|wav)$/
+const VOICE_MODELS = ['eleven_flash_v2_5', 'eleven_turbo_v2_5', 'eleven_multilingual_v2', 'eleven_v3', 'eleven_v4']
+const SPEAK_MAX = 400
+/** Una generación en curso, guardada en data/audio/<hash>.pending.json para no pagarla dos veces si el panel se recarga. */
+type SpeakPending = { order: string; flowId: string; sessionIds: string[]; status: string; started: number }
+
+/** Lee el JSON que devuelve una herramienta del conector (a veces con texto alrededor). Puro, sin $. */
+function parseToolJson(text: string | undefined): Record<string, unknown> | null {
+  if (!text) return null
+  try { return JSON.parse(text) as Record<string, unknown> } catch { /* sigue */ }
+  const m = text.match(/\{[\s\S]*\}/)
+  if (!m) return null
+  try { return JSON.parse(m[0]) as Record<string, unknown> } catch { return null }
+}
+
+/**
+ * Busca el enlace del audio generado dentro de la respuesta de creative_get_flow_run_status.
+ * Hoy llega en `generations[].content_url` (https firmado a un .mp3 en elevenlabsusercontent.com, caduca
+ * en unas horas); si cambia, recorre la respuesta, descarta el lienzo (elevenlabs.io/app/...) y prefiere
+ * claves con nombre de audio. Puro, sin $.
+ */
+function findAudioUrl(answer: unknown): string | null {
+  const gens = (answer as { generations?: { content_url?: unknown; status?: unknown }[] } | null)?.generations
+  const direct = Array.isArray(gens) ? gens.find(g => g && g.status !== 'failed' && typeof g.content_url === 'string' && g.content_url.startsWith('https://')) : undefined
+  if (direct) return direct.content_url as string
+  const found: { key: string; url: string }[] = []
+  const walk = (v: unknown, key: string, depth: number) => {
+    if (depth > 8 || v === null || v === undefined) return
+    if (typeof v === 'string') {
+      if (/^https:\/\/\S+$/.test(v) && !/\/app\//.test(v) && !/orb|thumbnail|\.webp|\.png|\.jpe?g/i.test(v)) found.push({ key, url: v })
+      return
+    }
+    if (Array.isArray(v)) { v.forEach(x => walk(x, key, depth + 1)); return }
+    if (typeof v === 'object') for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, k, depth + 1)
+  }
+  walk(answer, '', 0)
+  const score = (f: { key: string; url: string }) =>
+    (/content|master|audio|output|full_res|download|media|file|signed/i.test(f.key) ? 2 : 0) + (/\.(mp3|wav|ogg|m4a)(\?|$)/i.test(f.url) ? 1 : 0) - (/words_download/i.test(f.key) ? 5 : 0)
+  found.sort((a, b) => score(b) - score(a))
+  return found[0]?.url ?? null
+}
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -472,9 +526,86 @@ export const register: Register = on => {
     const relay = async (text: string) => { await $.prompt.submit({ text: `Desde la oficina (juego): ${text}` }) }
     const call = async (input: Record<string, unknown>) => (await $.tool.call(input as never)) as ToolAnswer
 
-    const runOrder = async (a: QueueItem): Promise<OrderResult> => {
-      try {
+    /* ---- Voces premium: el conector de ElevenLabs que esta sesión tenga conectado ---- */
+    let vozTools: { gen: string; status: string } | null = null
+    let vozLooked = 0
+    const findVozTools = async () => {
+      if (vozTools || Date.now() - vozLooked < 60e3) return vozTools
+      vozLooked = Date.now()
+      const list = await $.tool.list().catch(() => [])
+      const voiceOnly = (d: string) => (/covers voice and speech/i.test(d) ? 1 : 0)
+      const gens = list.filter(t => t.mcp && t.name.endsWith('__creative_generate_speech'))
+        .sort((x, y) => voiceOnly(y.description) - voiceOnly(x.description))
+      for (const g of gens) {
+        const status = `${g.name.slice(0, -'creative_generate_speech'.length)}creative_get_flow_run_status`
+        if (list.some(t => t.name === status)) { vozTools = { gen: g.name, status }; break }
+      }
+      return vozTools
+    }
+
+    /**
+     * Orden speak, por pasos (una vuelta del puente cada segundo): 1) si el mp3 ya existe, listo;
+     * 2) si no hay generación en curso, la empieza (gasta créditos) y la anota en <hash>.pending.json;
+     * 3) si la hay, pregunta su estado y, al terminar, baja el audio a data/audio/<hash>.mp3.
+     * Devuelve null mientras ElevenLabs sigue trabajando.
+     */
+    const runSpeak = async (a: QueueItem): Promise<OrderResult | null> => {
+      if (!a.text || a.text.length > SPEAK_MAX || !a.voiceId || !VOICE_RE.test(a.voiceId) || !a.audio || !AUDIO_RE.test(a.audio)) {
+        return fail('Orden de voz incompleta.')
+      }
+      const mp3 = `${gameDir}/data/audio/${a.audio}.mp3`
+      const pendingPath = `${gameDir}/data/audio/${a.audio}.pending.json`
+      if (await $.fs.exists(mp3).catch(() => false)) return { status: 'done', detail: 'Voz lista.', audio: a.audio }
+      let p: SpeakPending | null = null
+      try { p = JSON.parse(await $.fs.read(pendingPath)) as SpeakPending } catch { p = null }
+      const validStatus = (s: unknown) => typeof s === 'string' && /^mcp__[\w-]+__creative_get_flow_run_status$/.test(s)
+      if (p && (typeof p.flowId !== 'string' || !Array.isArray(p.sessionIds) || !validStatus(p.status) || Date.now() - p.started > 3 * 60e3)) p = null
+
+      if (!p) {
         if (Date.now() - new Date(a.created).getTime() > 10 * 60e3) return fail('La orden venció: se dio hace más de 10 minutos.')
+        const tools = await findVozTools()
+        if (!tools) return fail('No encontré el conector de voz de ElevenLabs en esta sesión de Claude.')
+        const model = a.model && VOICE_MODELS.includes(a.model) ? a.model : 'eleven_flash_v2_5'
+        const r = await call({
+          tool: tools.gen, prompt: a.text, voice_id: a.voiceId, model_id: model, generations_count: 1,
+          context: 'Voz de un personaje del juego Oficina de chats; la persona encendió las voces premium.',
+        })
+        if (r?.deny) return fail(`Falta permiso para ElevenLabs: permite ${tools.gen} y ${tools.status} (mira el README).`)
+        if (!r || r.isError) return fail(`ElevenLabs: ${r?.text ?? 'no respondió.'}`)
+        const j = parseToolJson(r.text)
+        const flowId = typeof j?.flow_id === 'string' ? j.flow_id : ''
+        const raw = Array.isArray(j?.session_ids) ? j.session_ids : typeof j?.session_id === 'string' ? [j.session_id] : []
+        const sessionIds = raw.filter((x): x is string => typeof x === 'string').slice(0, 4)
+        if (!flowId || !sessionIds.length) return fail('ElevenLabs no devolvió la generación.')
+        await $.fs.write(pendingPath, JSON.stringify({ order: a.id, flowId, sessionIds, status: tools.status, started: Date.now() } satisfies SpeakPending))
+        return null
+      }
+
+      const r = await call({ tool: p.status, flow_id: p.flowId, session_ids: p.sessionIds, context: 'Revisar si ya está lista la voz del personaje.' })
+      if (r?.deny) return fail(`Falta permiso para ElevenLabs: permite ${p.status} (mira el README).`)
+      const j = r && !r.isError ? parseToolJson(r.text) : null
+      if (j?.has_failures) return fail(`ElevenLabs no pudo generar la voz. ${cut(String(j.error ?? j.message ?? ''), 160)}`.trim())
+      if (!j?.all_completed) return Date.now() - p.started > 120e3 ? fail('ElevenLabs tardó demasiado con la voz.') : null
+      const url = findAudioUrl(j)
+      if (!url) return fail('ElevenLabs terminó, pero no encontré el enlace del audio.')
+      const run = await $.process.run(['node', `${$.plugin.root}/scripts/bajar-audio.cjs`, url, mp3], { timeoutMs: 60000 })
+      if (run.exitCode !== 0) return fail(`No pude guardar el audio: ${run.stderr || run.stdout}`)
+      return { status: 'done', detail: 'Voz lista.', audio: a.audio }
+    }
+
+    const runOrder = async (a: QueueItem): Promise<OrderResult | null> => {
+      try {
+        if (a.type === 'speak') return await runSpeak(a)
+        if (Date.now() - new Date(a.created).getTime() > 10 * 60e3) return fail('La orden venció: se dio hace más de 10 minutos.')
+        if (a.type === 'transcribe') {
+          if (!a.upload || !UPLOAD_RE.test(a.upload) || !(await $.fs.exists(`${gameDir}/data/uploads/${a.upload}`).catch(() => false))) {
+            return fail('No encontré la grabación.')
+          }
+          // El conector de ElevenLabs solo transcribe audio que ya esté en un flujo: un enlace https público,
+          // un archivo adjunto al chat o uno que la persona elige a mano en su selector. Una grabación del PC
+          // no llega sola, así que por ahora se responde «no disponible» (el juego esconde el botón).
+          return fail('La transcripción premium todavía no está disponible: el conector de ElevenLabs no recibe grabaciones del PC.')
+        }
         if (a.type === 'send') {
           if (!a.sessionId || !SESSION_RE.test(a.sessionId) || !a.message) return fail('Orden incompleta.')
           const r = await call({ tool: 'mcp__ccd_session_mgmt__send_message', session_id: a.sessionId, message: a.message })
@@ -559,6 +690,7 @@ export const register: Register = on => {
           let item: QueueItem
           try { item = JSON.parse(await $.fs.read(`${gameDir}/data/queue/${ent.name}`)) as QueueItem } catch { continue }
           const result = await runOrder(item)
+          if (!result) continue // sigue en curso (voz premium): se revisa en la próxima vuelta
           await $.fs.write(donePath, JSON.stringify({ id, ...result, finished: new Date().toISOString() }))
           askLater = true
         }
