@@ -22,4 +22,6 @@ Panel lateral para la app de escritorio de Claude: una oficina virtual de tus pr
 
 Cuando la app no deja que el panel haga algo directamente (enviar, crear, archivar), se lo pasa a Claude en el chat para que lo haga.
 
+**Voces premium (opcional):** si en el juego enciendes «🎙️ Voces premium (ElevenLabs)», el panel genera las frases con el conector de ElevenLabs y las guarda en `data/audio/` para no pagarlas dos veces. Necesita permiso para `creative_generate_speech` y `creative_get_flow_run_status` (los detalles están en el README del juego).
+
 Los datos salen de `~/.claude/projects` (los hilos guardados en tu PC) y de la lista de sesiones de la app. Se actualiza solo cada 15 segundos. `/oficina` abre el panel. Requiere Node en el PATH.

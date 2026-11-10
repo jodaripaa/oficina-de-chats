@@ -24,6 +24,8 @@ fs.mkdirSync(DONE_DIR, { recursive: true });
 let TOKEN;
 try { TOKEN = fs.readFileSync(TOKEN_FILE, 'utf8').trim(); } catch {}
 if (!TOKEN || TOKEN.length < 32) { TOKEN = crypto.randomBytes(24).toString('hex'); fs.writeFileSync(TOKEN_FILE, TOKEN); }
+// Voces premium (ElevenLabs): órdenes speak/transcribe, audio guardado y subida de grabaciones.
+const voz = require('./voces-premium').create({ dataDir: DATA_DIR, token: TOKEN, findThread: id => findThread(id), queueDir: QUEUE_DIR, doneDir: DONE_DIR });
 
 /* ------------------------------------------------------------------ */
 /* Lectura de hilos                                                     */
@@ -282,6 +284,7 @@ function makeAction(body) {
     if (!message) throw new Error('Escribe la tarea del hilo nuevo.');
     return { type, project: p.name, cwd: p.path, message };
   }
+  if (type === 'speak' || type === 'transcribe') return voz.makeAction(type, body);
   throw new Error('Orden desconocida.');
 }
 
@@ -325,8 +328,10 @@ const server = http.createServer(async (req, res) => {
       try { input = JSON.parse(body); action = makeAction(input); } catch (e) { return json(res, 400, { error: e.message }); }
       // Vista previa: el texto exacto que se enviaría, sin dejar nada en la cola (para confirmar antes de enviar).
       if (input.preview) return json(res, 200, { preview: true, title: action.title, message: action.message, delicate: String(action.message || '').includes(mensajes.DELICATE_NOTE) });
+      if (action.immediate) return json(res, 200, action.immediate);
       const id = `${Date.now().toString(36)}-${crypto.randomBytes(4).toString('hex')}`;
       fs.writeFileSync(path.join(QUEUE_DIR, `${id}.json`), JSON.stringify({ id, created: new Date().toISOString(), ...action }));
+      voz.queued(action, id);
       cleanupDone();
       return json(res, 200, { id, status: 'pending' });
     }
@@ -336,6 +341,8 @@ const server = http.createServer(async (req, res) => {
       try { return json(res, 200, JSON.parse(fs.readFileSync(path.join(DONE_DIR, `${id}.json`), 'utf8'))); }
       catch { return json(res, 200, { id, status: 'pending' }); }
     }
+
+    if (await voz.handle(req, res, url)) return;
 
     // Archivos del juego. El token va dentro de la página: otras webs no pueden leerlo.
     const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, '');

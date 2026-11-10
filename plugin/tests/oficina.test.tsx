@@ -48,14 +48,16 @@ const LIVE = JSON.stringify([
   { sessionId: 'local_b2', title: 'Informe mensual', cwd: 'C:\\repo\\informes', isRunning: false, lastActivityAt: now, link: 'claude://x/local_b2' },
 ])
 
-const settle = () => new Promise(r => setTimeout(r, 30))
+// El entorno de las pruebas tiene setTimeout, pero la lib de tipos (sin DOM ni Node) no lo declara.
+declare const setTimeout: (fn: () => void, ms: number) => unknown
+const settle = () => new Promise<void>(r => setTimeout(r, 30))
 
 test('la oficina muestra proyectos, avance y maneja los hilos', async ($, on) => {
   const calls: { tool: string; [k: string]: unknown }[] = []
   on('command.register', () => ({ value: { command: 'oficina' } }))
   on('tool.register', () => ({ value: { tool: 'mcp__oficina__resumen' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('clock.every', () => ({ value: { cancel: () => {} } }))
+  on('clock.every', () => ({ value: undefined })) // el temporizador no avanza: el ciclo corre una vez al empezar
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: COLLECT, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   on('tool.call', (_, e) => {

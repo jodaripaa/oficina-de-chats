@@ -53,6 +53,9 @@ canvas#game { position: fixed; inset: 0; width: 100vw; height: 100vh; image-rend
 .pixel-btn.warn { background: #7c3a12; border-color: var(--orange); }
 .pixel-btn.ghost { background: transparent; box-shadow: none; }
 .pixel-btn[disabled] { opacity: .45; cursor: not-allowed; }
+.pixel-btn.mini { font-size: 8px; padding: 5px 7px; }
+.modal-head .premium-say { margin-left: auto; align-self: flex-start; }
+.modal-head .premium-say + .close { margin-left: 0; }
 
 .hint {
   position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 4;

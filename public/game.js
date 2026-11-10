@@ -850,6 +850,7 @@ function openModal(html, onMount) {
   if (first) first.focus();
 }
 function closeModal() {
+  if (premiumRec) { premiumRec.cancelar(); premiumRec = null; }
   $('#modal-back').hidden = true;
   $('#modal').innerHTML = '';
   modalOpen = false;
@@ -895,6 +896,87 @@ function rich(text) {
   return esc(text)
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+}
+
+/* ---- Voces premium (ElevenLabs, opcional: voz-elevenlabs.js) ---- */
+const premium = () => window.VozElevenLabs || null;
+const premiumOn = () => Boolean(premium() && premium().disponible());
+let premiumRec = null; // grabación en curso del 🎙️ premium
+const plainText = s => String(s || '').replace(/[`*_#>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+function shortText(s, n) {
+  const t = plainText(s);
+  if (t.length <= n) return t;
+  const i = t.lastIndexOf(' ', n - 1);
+  return `${t.slice(0, i > n / 2 ? i : n - 1)}…`;
+}
+/** Lo que cuenta un empleado al pulsar 🔊: su pregunta, en qué anda o su último resumen (corto, para cuidar créditos). */
+function deskLine(t) {
+  if (t.ask) return shortText(`¡Hola! Te tengo una pregunta: ${plainText(t.ask)}`, 220);
+  if (t.status === 'trabajando' && t.current) return shortText(`¡Aquí ando, trabajando! Ahora estoy en: ${plainText(t.current)}`, 220);
+  if (t.recap) return shortText(`¡Hola! Te cuento cómo voy: ${plainText(t.recap)}`, 220);
+  if (t.status === 'dormido') return 'Zzz… ¡Ah, hola! Llevo días sin trabajo por aquí. Cuando quieras, me despiertas.';
+  return shortText(`¡Hola! Soy el hilo «${plainText(t.title)}». Listo para lo que necesites.`, 160);
+}
+/** Un botón 🔊: el primer clic prepara y reproduce la voz; otro clic mientras tanto la calla. */
+function bindSpeakButton(btn, getText, id) {
+  if (!btn) return;
+  const label = btn.textContent;
+  let busy = false;
+  btn.addEventListener('click', async () => {
+    const v = premium();
+    if (!v) return;
+    if (busy) { v.callar(); return; }
+    busy = true;
+    btn.textContent = '⏹️ Callar';
+    try { await v.hablar(getText(), { id }); } catch (e) { toast(`🔊 Voz premium: ${e.message}`, 'error', 6000); }
+    finally { busy = false; btn.textContent = label; }
+  });
+}
+/** El 🎙️ premium: graba hasta un minuto y ESCRIBE lo que dijiste en el cuadro. Nunca envía solo. */
+function bindPremiumMic(btn, say) {
+  if (!btn || !say) return;
+  const label = btn.textContent;
+  const reset = () => { premiumRec = null; btn.disabled = false; btn.textContent = label; btn.classList.remove('warn'); };
+  btn.addEventListener('click', async () => {
+    if (!premiumRec) {
+      const rec = premium().grabarYTranscribir();
+      premiumRec = rec;
+      btn.textContent = '⏹️ Listo';
+      btn.classList.add('warn');
+      rec.listo.catch(e => { toast(`🎙️ ${e.message}`, 'error', 6000); if (premiumRec === rec) reset(); });
+      return;
+    }
+    const rec = premiumRec;
+    btn.disabled = true;
+    btn.textContent = '⏳ Escribiendo…';
+    try {
+      const text = await rec.detener();
+      if (text) { say.value = say.value.trim() ? `${say.value.trimEnd()} ${text}` : text; say.focus(); }
+      else toast('🎙️ No entendí nada, prueba otra vez.', 'info');
+    } catch (e) { toast(`🎙️ ${e.message}`, 'error', 6000); }
+    finally { reset(); }
+  });
+}
+function premiumHelpBox() {
+  if (!premium()) return '';
+  const on = premium().encendido();
+  return `<div class="box premium-box"><h3>🎙️ VOCES PREMIUM (ELEVENLABS)</h3>
+    <p>Opcional. Los empleados, la recepcionista y Santa hablan con voces de ElevenLabs: pulsa <b>🔊</b> en un escritorio o en la recepción. Cada frase nueva gasta créditos de tu cuenta de ElevenLabs (una corta ≈ 20) y las repetidas ya no se pagan. Necesita el panel Oficina abierto en Claude.</p>
+    <div class="foot-row"><button class="pixel-btn${on ? ' primary' : ''}" data-premium-toggle aria-pressed="${on}">🎙️ Voces premium (ElevenLabs): ${on ? 'ENCENDIDAS' : 'APAGADAS'}</button>
+    ${on ? `<button class="pixel-btn" data-premium-try>${XMAS ? '🎅 Probar con Santa' : '🛎️ Probar'}</button>` : ''}</div></div>`;
+}
+function bindPremiumHelp(box) {
+  const slot = box.querySelector('.premium-slot');
+  if (!slot || !premium()) return;
+  slot.querySelector('[data-premium-toggle]')?.addEventListener('click', () => {
+    premium().encender(!premium().encendido());
+    toast(premium().encendido() ? '🎙️ Voces premium encendidas: pulsa 🔊 en un escritorio.' : '🎙️ Voces premium apagadas.', 'ok', 3500);
+    slot.innerHTML = premiumHelpBox();
+    bindPremiumHelp(box);
+  });
+  bindSpeakButton(slot.querySelector('[data-premium-try]'),
+    () => (XMAS ? '¡Jo, jo, jo! ¡Feliz Navidad! Vamos a repartir órdenes por toda la oficina.' : '¡Hola! Bienvenido a tu oficina. Pasa por la recepción y te cuento quién te espera.'),
+    XMAS ? 'santa' : 'recepcion');
 }
 
 /* ---- Escritorio de un hilo ---- */
@@ -964,6 +1046,7 @@ async function openDesk(id) {
     <header class="modal-head">
       <span class="avatar-slot"></span>
       <div><h2>${esc(t.title)}</h2><div class="sub">${statusTag(t.status)} · 🏢 ${esc(p.name)} · ${esc(ago(t.updated))}</div></div>
+      ${premiumOn() ? '<button class="pixel-btn mini premium-say" data-premium-say title="Que te cuente cómo va, con su voz de ElevenLabs (gasta créditos)">🔊 Voz premium</button>' : ''}
       <button class="pixel-btn close" data-close aria-label="Cerrar">✕</button>
     </header>
     <nav class="tabs">
@@ -979,6 +1062,7 @@ async function openDesk(id) {
         <textarea class="say" placeholder="${t.ask ? 'Escribe tu respuesta a su pregunta…' : 'Escribe una instrucción para este hilo…'}" aria-label="Mensaje para el hilo"></textarea>
         <div class="foot-row">
           <button class="pixel-btn primary" data-send>💬 ${t.ask ? 'RESPONDER' : 'ENVIAR'}</button>
+          ${premium()?.puedeTranscribir() ? '<button class="pixel-btn" data-premium-mic title="Graba hasta un minuto y escribe lo que dijiste en el cuadro (no envía nada)">🎙️ premium</button>' : ''}
           <span class="grow"></span>
           ${t.canOpen ? '<button class="pixel-btn" data-open>↗ ABRIR HILO</button>' : ''}
           <button class="pixel-btn ghost" data-archive>🗄 ARCHIVAR</button>
@@ -990,6 +1074,8 @@ async function openDesk(id) {
     fetch(`/api/thread?id=${encodeURIComponent(id)}`).then(r => r.json()).then(h => { history = h; if (modalOpen) render(box); })
       .catch(() => { history = { error: 'No pude leer la bitácora.' }; if (modalOpen) render(box); });
     const say = box.querySelector('.say');
+    bindSpeakButton(box.querySelector('[data-premium-say]'), () => deskLine(t), id);
+    bindPremiumMic(box.querySelector('[data-premium-mic]'), say);
     box.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => {
       const [, message, kind] = quick[Number(b.dataset.quick)];
       confirmSend({ threadId: id, kind, ask: kind === 'reply' ? t.ask : null, message }, what);
@@ -1156,8 +1242,9 @@ function openHelp() {
       <p>📋 La <b>pizarra</b> resume el avance de la oficina · ➕ el <b>buzón</b> crea un hilo nuevo · 📣 el <b>megáfono</b> pide avance a todos · 🗄️ el <b>archivador</b> guarda los dormidos.</p>
       <p>🛎️ En el vestíbulo, la <b>recepción</b> te dice quién te espera. Pulsa <kbd>M</kbd> para ir a cualquier oficina.</p>
       <p>🔊 En cada escritorio, <b>Escuchar reporte</b> hace que el trabajador te cuente cómo va; en recepción está la <b>☕ reunión de la mañana</b>. Con 🎙️ le dictas instrucciones (nunca se envían solas) y el botón 🔊 de arriba silencia las voces.</p>
+      <div class="premium-slot">${premiumHelpBox()}</div>
     </div>
-    <footer class="modal-foot"><div class="foot-row"><button class="pixel-btn primary" data-close>${XMAS ? '🎁 ¡A REPARTIR!' : '¡A TRABAJAR!'}</button></div></footer>`);
+    <footer class="modal-foot"><div class="foot-row"><button class="pixel-btn primary" data-close>${XMAS ? '🎁 ¡A REPARTIR!' : '¡A TRABAJAR!'}</button></div></footer>`, bindPremiumHelp);
 }
 
 /* ------------------------------------------------------------------ */

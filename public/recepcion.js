@@ -86,6 +86,7 @@ function openReception() {
   const working = all.filter(t => t.status === 'trabajando');
   openModal(`
     <header class="modal-head"><div><h2>${XMAS ? '🎅' : '🛎️'} RECEPCIÓN</h2><div class="sub">${waiting.length ? `¡Hola! ${waiting.length === 1 ? 'Un hilo te espera' : `${waiting.length} hilos te esperan`}: respóndeles desde aquí` : '¡Hola! Esto es lo que pasa en la oficina'}</div></div>
+      ${typeof premiumOn === "function" && premiumOn() ? '<button class="pixel-btn mini premium-say" data-premium-say title="La recepcionista te lo cuenta con su voz de ElevenLabs (gasta créditos)">🔊 Que me lo diga</button>' : ''}
       <button class="pixel-btn close" data-close aria-label="Cerrar">✕</button></header>
     <div class="modal-body">
       <div class="stats">
@@ -100,7 +101,13 @@ function openReception() {
     <footer class="modal-foot avisos-foot"></footer>`, box => {
     bindRows(box);
     bindCards(box);
-    if (typeof avisarVentana === "function") avisarVentana("recepcion", box); // botón «Reunión de la mañana» (voz-oficina.js)
+    if (typeof avisarVentana === "function") avisarVentana("recepcion", box);
+    if (typeof bindSpeakButton === "function") bindSpeakButton(box.querySelector("[data-premium-say]"), () => {
+      const k = working.length, w = waiting.length;
+      let s = `¡Hola! Ahora hay ${k === 0 ? 'ningún hilo trabajando' : k === 1 ? 'un hilo trabajando' : `${k} hilos trabajando`}`;
+      s += w ? ` y ${w === 1 ? 'uno te espera' : `${w} te esperan`}. El primero es «${shortText(waiting[0].title, 60)}».` : ' y nadie te espera. ¡Todo al día!';
+      return s;
+    }, 'recepcion'); // botón «Reunión de la mañana» (voz-oficina.js)
     if (typeof mountAvisosControls === 'function') mountAvisosControls(box.querySelector('.avisos-foot'));
   });
 }
