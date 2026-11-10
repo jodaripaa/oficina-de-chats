@@ -144,6 +144,7 @@ function buildMap(data) {
   objects.push({ kind: 'sofa', room: -10, x: 3, y: 15, w: 3, h: 1, solid: true, deco: true });
   objects.push({ kind: 'cooler', room: -10, x: 11, y: 16, w: 1, h: 1, solid: true, deco: true });
 
+  window.AMB?.decorate(rooms, objects, projects); // decoración temática (ambiente.js)
   const objAt = new Map();
   for (const o of objects) for (let dy = 0; dy < o.h; dy++) for (let dx = 0; dx < o.w; dx++) objAt.set(`${o.x + dx},${o.y + dy}`, o);
   return { W, H, tiles, roomOf, rooms, objects, objAt };
@@ -210,6 +211,7 @@ function drawStatic() {
       }
     }
   }
+  window.AMB?.staticUnder(g, map); // jardín, pisos temáticos y sombras (ambiente.js)
   // Alfombra del vestíbulo y puerta de entrada
   if (XMAS) {
     px(g, '#1f6f43', 3 * T, 12 * T + 8, 6 * T, 2 * T); px(g, '#b91c1c', 3 * T + 3, 12 * T + 11, 6 * T - 6, 2 * T - 6);
@@ -243,6 +245,7 @@ function wreath(g, cx, cy) {
 }
 
 function drawFixed(g, o) {
+  if (window.AMB?.drawFixed(g, o)) return; // muebles nuevos y plantas que se mecen (ambiente.js)
   const bx = o.x * T, by = o.y * T;
   switch (o.kind) {
     case 'plant':
@@ -306,6 +309,7 @@ function drawFixed(g, o) {
 /* ------------------------------------------------------------------ */
 
 function drawDesk(o, time) {
+  if (window.SPR?.drawDesk(o, time)) return; // sprites con poses (sprites.js)
   const t = threadById.get(o.thread);
   if (!t) return;
   const st = STATUS[t.status] || STATUS.dormido;
@@ -455,6 +459,7 @@ function drawBoardProgress(o) {
 }
 
 function drawReceptionist(o, time) {
+  if (window.SPR?.drawReceptionist(o, time)) return; // sprites.js
   const bx = (o.x + 1) * T + 8, by = o.y * T;
   const waiting = allThreads().filter(t => t.status === 'espera').length;
   px(ctx, '#2d2a3e', bx + 2, by + 3, 12, 13);
@@ -509,6 +514,7 @@ function drawSanta(x, y, step) {
 }
 
 function drawPlayer(time) {
+  if (window.SPR?.drawPlayer(time)) return; // caminata en 4 direcciones (sprites.js)
   const x = (player.fx + (player.tx - player.fx) * player.t) * T;
   const y = (player.fy + (player.ty - player.fy) * player.t) * T;
   const moving = player.t < 1;
@@ -598,7 +604,7 @@ function update(dt) {
   const pxw = (player.fx + (player.tx - player.fx) * player.t) * T + 8;
   const pyw = (player.fy + (player.ty - player.fy) * player.t) * T + 8;
   const ww = map.W * T, wh = map.H * T;
-  const dpr = canvas.width / innerWidth;
+  const dpr = canvas.width / innerWidth || 1; // con la ventana oculta innerWidth es 0 y la cámara quedaba en NaN
   const hudBase = ((hudEl.getBoundingClientRect().bottom + 6) * dpr) / SCALE; // la barra de arriba no tapa el mapa
   const freeH = viewH - hudBase;
   const tx = ww <= viewW ? (ww - viewW) / 2 : Math.max(0, Math.min(ww - viewW, pxw - viewW / 2));
@@ -615,7 +621,9 @@ function render(time) {
   if (!map || !staticLayer) return;
   ctx.imageSmoothingEnabled = false;
   ctx.setTransform(SCALE, 0, 0, SCALE, -Math.round(cam.x * SCALE), -Math.round(cam.y * SCALE));
+  window.AMB?.beforeWorld(ctx, time);
   ctx.drawImage(staticLayer, 0, 0);
+  window.AMB?.afterStatic(ctx, time); // ventanas, reloj, plantas, puertas (ambiente.js)
 
   const viewW = canvas.width / SCALE, viewH = canvas.height / SCALE;
   const visible = o => (o.x + o.w) * T > cam.x - T && o.x * T < cam.x + viewW + T && (o.y + o.h) * T > cam.y - 2 * T && o.y * T < cam.y + viewH + T;
@@ -635,6 +643,7 @@ function render(time) {
     else if (o.kind === 'minitree') drawTree(o, time, false);
   }
   if (!playerDrawn) drawPlayer(time);
+  window.AMB?.afterWorld(ctx, time); // luz según la hora y confeti (ambiente.js)
 
   // Brillo dorado sobre lo que señalas o tienes al lado
   const glowObj = hover || nearbyObject();
@@ -683,7 +692,7 @@ function render(time) {
         const t = threadById.get(o.thread);
         if (t) {
           const focus = hover === o || nearbyObject() === o;
-          const lift = (t.status === 'espera' ? 16 : t.status === 'trabajando' ? 11 : 2) + (XMAS ? (t.status === 'espera' || t.status === 'trabajando' ? 3 : 8) : 0);
+          const lift = (t.status === 'espera' ? 18 : t.status === 'trabajando' ? 12 : 8) + (XMAS ? (t.status === 'espera' || t.status === 'trabajando' ? 3 : 2) : 0); // personajes más altos (sprites.js)
           label(cut(t.title, focus ? 40 : 13), (o.x + 1) * T, o.y * T - lift, { size: 6, color: focus ? '#ffd166' : '#fff' });
         }
       } else if (o.kind === 'board') label('📋 Pizarra', (o.x + 2) * T, o.y * T + 11, { size: 6, color: '#1e1b4b', bg: 'rgba(255,209,102,.95)' });
@@ -698,6 +707,7 @@ function render(time) {
   if (near && !modalOpen) {
     label(`[E] ${verbFor(near)}`, (near.x + near.w / 2) * T, (near.y + near.h) * T + 13, { size: 7, color: '#ffd166', bg: 'rgba(124,58,18,.92)' });
   }
+  window.AMB?.overlay(ctx, time); // transición al entrar (ambiente.js)
 }
 
 function loop(now) {
@@ -818,6 +828,7 @@ addEventListener('keyup', ev => keys.delete(ev.code));
 addEventListener('blur', () => keys.clear());
 
 function onEnterRoom(r) {
+  window.AMB?.enterRoom(r);
   const p = r >= 0 ? projectByKey.get(map.rooms[r]?.key) : null;
   $('#place').textContent = r >= 0 ? `📍 ${map.rooms[r].name}` : r === -10 ? '📍 Vestíbulo' : r === -20 ? '📍 Pasillo' : '📍 Oficina';
   if (p) {
@@ -862,6 +873,7 @@ function interact(o) {
 }
 
 function avatarCanvas(t) {
+  if (window.SPR) return SPR.portrait(t); // retrato grande (sprites.js)
   const c = document.createElement('canvas');
   c.width = 16; c.height = 16;
   const g = c.getContext('2d');
@@ -1210,6 +1222,7 @@ function deskSignature(data) {
 async function refresh() {
   try {
     const data = await fetch('/api/world').then(r => r.json());
+    window.AMB?.onWorld(world, data); // confeti cuando un hilo llega al 100 %
     world = data;
     threadById.clear(); projectByKey.clear();
     for (const p of data.projects) { projectByKey.set(p.key, p); for (const t of p.threads) threadById.set(t.id, t); }
